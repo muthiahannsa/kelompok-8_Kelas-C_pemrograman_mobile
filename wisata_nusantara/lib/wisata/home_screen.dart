@@ -1,7 +1,9 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../auth/auth_provider.dart'; // <-- TAMBAHAN
+import '../cuaca/weather_screen.dart'; // <-- TAMBAHAN
+import 'add_wisata_screen.dart'; // <-- TAMBAHAN
 import 'wisata_model.dart';
 import 'wisata_provider.dart';
 
@@ -10,6 +12,8 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAdmin = context.watch<AuthProvider>().isAdmin; // <-- TAMBAHAN
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -17,7 +21,32 @@ class HomeScreen extends StatelessWidget {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         centerTitle: false,
+        // <-- TAMBAHAN: Tombol Logout
+        actions: [
+          IconButton(
+            tooltip: 'Logout',
+            icon: const Icon(Icons.logout),
+            onPressed: () {
+              context.read<AuthProvider>().logout();
+            },
+          ),
+        ],
       ),
+      // <-- TAMBAHAN: Tombol Tambah Wisata khusus Admin
+      floatingActionButton: isAdmin
+          ? FloatingActionButton(
+              tooltip: 'Tambah Wisata',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const AddWisataScreen(),
+                  ),
+                );
+              },
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: Consumer<WisataProvider>(
         builder: (context, provider, child) {
           final daftarWisata = provider.filteredWisata;
@@ -199,88 +228,107 @@ class HomeScreen extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Gambar wisata
-          if (wisata.gambarUrl.isNotEmpty)
-            Image.network(
-              wisata.gambarUrl,
-              height: 180,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return _imagePlaceholder();
-              },
-            )
-          else
-            _imagePlaceholder(),
+      // <-- TAMBAHAN: InkWell membungkus Column agar kartu bisa diklik ke WeatherScreen
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => WeatherScreen(
+                wisataId: wisata.id,
+                nama: wisata.nama,
+                provinsi: wisata.provinsi,
+                deskripsi: wisata.deskripsi,
+                gambarUrl: wisata.gambarUrl,
+                lat: wisata.lat,
+                lon: wisata.lon,
+              ),
+            ),
+          );
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Gambar wisata
+            if (wisata.gambarUrl.isNotEmpty)
+              Image.network(
+                wisata.gambarUrl,
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return _imagePlaceholder();
+                },
+              )
+            else
+              _imagePlaceholder(),
 
-          // Informasi wisata
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        wisata.nama,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 16,
-                            color: Colors.grey,
+            // Informasi wisata
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          wisata.nama,
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              wisata.provinsi,
-                              style: const TextStyle(
-                                color: Colors.grey,
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.location_on,
+                              size: 16,
+                              color: Colors.grey,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                wisata.provinsi,
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        wisata.deskripsi,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          wisata.deskripsi,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
 
-                // Tombol favorit
-                IconButton(
-                  tooltip: isFavorite
-                      ? 'Hapus dari favorit'
-                      : 'Tambahkan ke favorit',
-                  onPressed: () {
-                    provider.toggleFavorite(wisata.id);
-                  },
-                  icon: Icon(
-                    isFavorite
-                        ? Icons.favorite
-                        : Icons.favorite_border,
-                    color: isFavorite ? Colors.red : Colors.grey,
+                  // Tombol favorit
+                  IconButton(
+                    tooltip: isFavorite
+                        ? 'Hapus dari favorit'
+                        : 'Tambahkan ke favorit',
+                    onPressed: () {
+                      provider.toggleFavorite(wisata.id);
+                    },
+                    icon: Icon(
+                      isFavorite
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      color: isFavorite ? Colors.red : Colors.grey,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
