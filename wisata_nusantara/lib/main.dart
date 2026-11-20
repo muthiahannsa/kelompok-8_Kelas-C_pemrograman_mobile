@@ -1,18 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart'; // File ini otomatis terbuat saat integrasi Firebase tadi
+import 'firebase_options.dart';
 import 'auth/auth_provider.dart';
-import 'auth/login_screen.dart';
+import 'auth/auth_wrapper.dart';
+import 'auth/notification_service.dart';
+import 'wisata/wisata_provider.dart';
+
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Menyalakan Firebase
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
+  await NotificationService().initNotification(rootScaffoldMessengerKey);
+
   runApp(const MyApp());
 }
 
@@ -23,16 +29,18 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Mendaftarkan state management AuthProvider agar bisa diakses seluruh aplikasi
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => WisataProvider()),
       ],
       child: MaterialApp(
+        scaffoldMessengerKey: rootScaffoldMessengerKey,
         title: 'Wisata Nusantara',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
         ),
-        home: const LoginScreen(), // Tampilan awal langsung diarahkan ke halaman kerjamu
+        home: const AuthWrapper(),
       ),
     );
   }
