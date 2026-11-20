@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
-import 'firebase_options.dart'; // File ini otomatis terbuat saat integrasi Firebase tadi
+import 'firebase_options.dart';
 import 'auth/auth_provider.dart';
-import 'auth/login_screen.dart';
+import 'auth/auth_wrapper.dart';
+import 'auth/notification_service.dart';
+
+// Key global agar notifikasi bisa muncul di halaman mana saja
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Menyalakan Firebase
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  
+
+  // Jalankan layanan Push Notifications
+  await NotificationService().initNotification(rootScaffoldMessengerKey);
+
   runApp(const MyApp());
 }
 
@@ -23,16 +30,18 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Mendaftarkan state management AuthProvider agar bisa diakses seluruh aplikasi
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        // Nanti saat digabung (Merge), tambahkan Provider milik Orang 2 & Orang 3 di sini
       ],
       child: MaterialApp(
+        scaffoldMessengerKey: rootScaffoldMessengerKey,
         title: 'Wisata Nusantara',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          useMaterial3: true,
         ),
-        home: const LoginScreen(), // Tampilan awal langsung diarahkan ke halaman kerjamu
+        home: const AuthWrapper(), // Otomatis cek apakah sudah login atau belum
       ),
     );
   }
