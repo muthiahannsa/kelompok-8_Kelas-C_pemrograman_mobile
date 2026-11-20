@@ -15,6 +15,21 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAdmin => _role == 'admin';
 
+AuthProvider() {
+    _auth.authStateChanges().listen((user) async {
+      _user = user;
+      if (user != null) {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists && doc.data() != null) {
+          _role = (doc.data() as Map<String, dynamic>)['role'] ?? 'user';
+        }
+      } else {
+        _role = 'user';
+      }
+      notifyListeners();
+    });
+  }
+
   // Fungsi Register (Membuat akun baru + menyimpan role di Firestore)
   Future<String?> register({
     required String email,
