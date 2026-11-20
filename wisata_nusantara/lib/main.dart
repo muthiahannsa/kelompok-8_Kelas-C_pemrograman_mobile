@@ -5,8 +5,8 @@ import 'firebase_options.dart';
 import 'auth/auth_provider.dart';
 import 'auth/auth_wrapper.dart';
 import 'auth/notification_service.dart';
+import 'wisata/wisata_provider.dart';
 
-// Key global agar notifikasi bisa muncul di halaman mana saja
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
 
@@ -17,7 +17,6 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Jalankan layanan Push Notifications
   await NotificationService().initNotification(rootScaffoldMessengerKey);
 
   runApp(const MyApp());
@@ -31,7 +30,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
-        // Nanti saat digabung (Merge), tambahkan Provider milik Orang 2 & Orang 3 di sini
+        ChangeNotifierProvider(create: (_) => WisataProvider()),
       ],
       child: MaterialApp(
         scaffoldMessengerKey: rootScaffoldMessengerKey,
@@ -41,7 +40,7 @@ class MyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const AuthWrapper(), // Otomatis cek apakah sudah login atau belum
+        home: const AuthWrapper(),
       ),
     );
   }
