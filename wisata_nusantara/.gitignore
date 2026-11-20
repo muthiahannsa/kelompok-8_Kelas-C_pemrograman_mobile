@@ -46,3 +46,10 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# File otomatis Flutter (jangan dilacak Git)
+.dart_tool/
+**/GeneratedPluginRegistrant.java
+**/GeneratedPluginRegistrant.m
+**/GeneratedPluginRegistrant.h
+**/GeneratedPluginRegistrant.swift
