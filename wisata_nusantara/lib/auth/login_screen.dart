@@ -9,4 +9,8 @@ class LoginScreen extends StatelessWidget {
       body: Center(child: Text('Halaman Login - Tugas Orang 1')),
     );
   }
+<<<<<<< HEAD
 }
+=======
+}
+>>>>>>> 6c004d9 (Commit proyek wisata_nusantara lokal)
