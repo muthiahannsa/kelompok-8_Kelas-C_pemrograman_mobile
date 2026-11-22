@@ -1,8 +1,7 @@
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-// Sesuaikan path import ini dengan lokasi rating_widget.dart
+import '../wisata/gambar_wisata.dart';
 import '../wisata/rating_widget.dart';
 
 import 'weather_service.dart';
@@ -40,9 +39,9 @@ class _WeatherScreenState extends State<WeatherScreen> {
       if (!mounted) return;
 
       context.read<WeatherService>().fetchWeather(
-        lat: widget.lat,
-        lon: widget.lon,
-      );
+            lat: widget.lat,
+            lon: widget.lon,
+          );
     });
   }
 
@@ -56,23 +55,8 @@ class _WeatherScreenState extends State<WeatherScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Gambar wisata
-            Image.network(
-              widget.gambarUrl,
-              height: 220,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                height: 220,
-                color: Colors.grey.shade300,
-                child: const Center(
-                  child: Icon(
-                    Icons.image_not_supported,
-                    size: 50,
-                  ),
-                ),
-              ),
-            ),
+            // Gambar wisata (mendukung URL maupun foto upload base64)
+            gambarWisata(widget.gambarUrl, height: 220),
 
             Padding(
               padding: const EdgeInsets.all(16),
@@ -165,7 +149,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                                 'https://openweathermap.org/img/wn/${weather.icon}@2x.png',
                                 width: 90,
                                 height: 90,
-                                errorBuilder: (_, __, ___) =>
+                                errorBuilder: (context, error, stackTrace) =>
                                     const Icon(
                                   Icons.cloud,
                                   size: 60,
@@ -196,7 +180,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Rating wisata dari Anggota 2
+                  // Rating wisata
                   const Text(
                     'Rating dan Ulasan Wisata',
                     style: TextStyle(
