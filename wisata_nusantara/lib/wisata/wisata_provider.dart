@@ -1,4 +1,3 @@
-
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -6,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import 'wisata_model.dart';
+import 'wisata_seed.dart';
 
 class WisataProvider extends ChangeNotifier {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -20,6 +20,7 @@ class WisataProvider extends ChangeNotifier {
   // Pencarian dan filter
   String _searchQuery = '';
   String? _selectedProvinsi;
+  String? _selectedKategori;
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -54,18 +55,23 @@ class WisataProvider extends ChangeNotifier {
 
   String? get selectedProvinsi => _selectedProvinsi;
 
+  String? get selectedKategori => _selectedKategori;
+
   // Daftar wisata yang sudah difilter
   List<Wisata> get filteredWisata {
     return _daftarWisata.where((wisata) {
-      final cocokNama = wisata.nama
-          .toLowerCase()
-          .contains(_searchQuery.toLowerCase());
+      final cocokNama =
+          wisata.nama.toLowerCase().contains(_searchQuery.toLowerCase());
 
       final cocokProvinsi = _selectedProvinsi == null ||
           _selectedProvinsi!.isEmpty ||
           wisata.provinsi == _selectedProvinsi;
 
-      return cocokNama && cocokProvinsi;
+      final cocokKategori = _selectedKategori == null ||
+          _selectedKategori!.isEmpty ||
+          wisata.kategori == _selectedKategori;
+
+      return cocokNama && cocokProvinsi && cocokKategori;
     }).toList();
   }
 
@@ -85,10 +91,7 @@ class WisataProvider extends ChangeNotifier {
   void _listenWisata() {
     _isLoading = true;
 
-    _wisataSubscription = _firestore
-        .collection('wisata')
-        .snapshots()
-        .listen(
+    _wisataSubscription = _firestore.collection('wisata').snapshots().listen(
       (snapshot) {
         _daftarWisata = snapshot.docs.map((doc) {
           return Wisata.fromFirestore(doc.id, doc.data());
@@ -118,10 +121,17 @@ class WisataProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Menghapus pencarian dan filter
+  // 3b. Memfilter wisata berdasarkan kategori
+  void filterByKategori(String? kategori) {
+    _selectedKategori = kategori;
+    notifyListeners();
+  }
+
+  // Menghapus pencarian dan semua filter
   void resetFilter() {
     _searchQuery = '';
     _selectedProvinsi = null;
+    _selectedKategori = null;
     notifyListeners();
   }
 
@@ -133,8 +143,7 @@ class WisataProvider extends ChangeNotifier {
       throw Exception('Silakan login terlebih dahulu.');
     }
 
-    final userDoc =
-        await _firestore.collection('users').doc(user.uid).get();
+    final userDoc = await _firestore.collection('users').doc(user.uid).get();
 
     final role = userDoc.data()?['role'];
 
@@ -145,30 +154,47 @@ class WisataProvider extends ChangeNotifier {
 
   // 4. Menambahkan data wisata (Admin)
   Future<void> addWisata(Wisata wisata) async {
-    try {
-      await _requireAdmin();
+    await _requireAdmin();
+    await _firestore.collection('wisata').add(wisata.toMap());
+  }
 
-      await _firestore.collection('wisata').add(
-            wisata.toMap(),
-          );
-    } catch (error) {
-      _errorMessage = 'Gagal menambahkan wisata: $error';
-      notifyListeners();
-      rethrow;
-    }
+  // 4b. Memperbarui data wisata (Admin) — dipakai menu Edit
+  Future<void> updateWisata(Wisata wisata) async {
+    await _requireAdmin();
+    await _firestore.collection('wisata').doc(wisata.id).update(
+          wisata.toMap(),
+        );
   }
 
   // 5. Menghapus data wisata (Admin)
   Future<void> deleteWisata(String wisataId) async {
-    try {
-      await _requireAdmin();
+    await _requireAdmin();
+    await _firestore.collection('wisata').doc(wisataId).delete();
+  }
 
-      await _firestore.collection('wisata').doc(wisataId).delete();
-    } catch (error) {
-      _errorMessage = 'Gagal menghapus wisata: $error';
-      notifyListeners();
-      rethrow;
+  // 5b. Mengisi data contoh destinasi terkenal (Admin).
+  // Hanya menambahkan yang belum ada; mengembalikan jumlah yang ditambahkan.
+  Future<int> isiDataContoh() async {
+    await _requireAdmin();
+
+    final koleksi = _firestore.collection('wisata');
+    final existing = await koleksi.get();
+    final existingIds = existing.docs.map((doc) => doc.id).toSet();
+
+    final batch = _firestore.batch();
+    var jumlah = 0;
+
+    wisataContoh.forEach((id, wisata) {
+      if (!existingIds.contains(id)) {
+        batch.set(koleksi.doc(id), wisata.toMap());
+        jumlah++;
+      }
+    });
+
+    if (jumlah > 0) {
+      await batch.commit();
     }
+    return jumlah;
   }
 
   // 6. Mengikuti perubahan data favorit secara realtime
@@ -227,9 +253,7 @@ class WisataProvider extends ChangeNotifier {
         });
       }
     } catch (error) {
-      _errorMessage = 'Gagal memperbarui favorit: $error';
-      notifyListeners();
-      rethrow;
+      throw Exception('Gagal memperbarui favorit: $error');
     }
   }
 
