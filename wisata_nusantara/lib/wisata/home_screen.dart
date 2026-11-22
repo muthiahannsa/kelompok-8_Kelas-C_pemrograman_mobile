@@ -1,347 +1,626 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../auth/auth_provider.dart'; // <-- TAMBAHAN
-import '../cuaca/weather_screen.dart'; // <-- TAMBAHAN
-import 'add_wisata_screen.dart'; // <-- TAMBAHAN
+import '../auth/auth_provider.dart';
+import '../theme/app_theme.dart';
+import 'add_wisata_screen.dart';
+import 'kategori.dart';
 import 'wisata_model.dart';
 import 'wisata_provider.dart';
+import 'wisata_widgets.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final isAdmin = context.watch<AuthProvider>().isAdmin; // <-- TAMBAHAN
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-    return Scaffold(
-      appBar: AppBar(
+class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController _searchController = TextEditingController();
+  bool _onlyFavorites = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // ---------------------------------------------------------------- helpers
+
+  void _snack(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.red.shade600 : null,
+      ),
+    );
+  }
+
+  String _displayName(String? email) {
+    if (email == null || email.isEmpty) return 'Traveler';
+    final local = email.split('@').first;
+    if (local.isEmpty) return 'Traveler';
+    return local[0].toUpperCase() + local.substring(1);
+  }
+
+  /// Rekomendasi: destinasi yang ditandai "populer" oleh admin (maksimal 6).
+  /// Bila belum ada yang ditandai, diambil dari seluruh destinasi. Urutan
+  /// diacak dengan seed tanggal sehingga berganti tiap hari tapi stabil di
+  /// hari yang sama.
+  List<Wisata> _recommendations(List<Wisata> all) {
+    var pool = all.where((w) => w.populer).toList();
+    if (pool.isEmpty) pool = List<Wisata>.of(all);
+    if (pool.isEmpty) return [];
+
+    pool.sort((a, b) => a.id.compareTo(b.id));
+
+    final now = DateTime.now();
+    final dayOfYear = now.difference(DateTime(now.year, 1, 1)).inDays;
+    pool.shuffle(Random(now.year * 1000 + dayOfYear));
+
+    return pool.take(6).toList();
+  }
+
+  void _bukaEdit(Wisata wisata) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => AddWisataScreen(wisata: wisata)),
+    );
+  }
+
+  Future<void> _pilihProvinsi(WisataProvider provider) async {
+    final terpilih = provider.selectedProvinsi;
+
+    final hasil = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        final daftar = provider.daftarProvinsi;
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.6,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                    'Pilih Provinsi',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                ListTile(
+                  title: const Text('Semua Provinsi'),
+                  trailing: (terpilih == null || terpilih.isEmpty)
+                      ? const Icon(Icons.check_rounded, color: AppColors.teal)
+                      : null,
+                  onTap: () => Navigator.pop(sheetContext, ''),
+                ),
+                for (final provinsi in daftar)
+                  ListTile(
+                    title: Text(provinsi),
+                    trailing: terpilih == provinsi
+                        ? const Icon(Icons.check_rounded, color: AppColors.teal)
+                        : null,
+                    onTap: () => Navigator.pop(sheetContext, provinsi),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (hasil == null) return; // ditutup tanpa memilih
+    provider.filterByProvinsi(hasil.isEmpty ? null : hasil);
+  }
+
+  Future<void> _toggleFavorite(WisataProvider provider, String id) async {
+    try {
+      await provider.toggleFavorite(id);
+    } catch (e) {
+      if (!mounted) return;
+      _snack(e.toString().replaceFirst('Exception: ', ''), isError: true);
+    }
+  }
+
+  Future<void> _confirmDelete(WisataProvider provider, Wisata wisata) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: const Text(
-          'Wisata Nusantara',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          'Hapus destinasi?',
+          style: TextStyle(fontWeight: FontWeight.w800),
         ),
-        centerTitle: false,
-        // <-- TAMBAHAN: Tombol Logout
+        content: Text('"${wisata.nama}" akan dihapus permanen dari database.'),
         actions: [
-          IconButton(
-            tooltip: 'Logout',
-            icon: const Icon(Icons.logout),
-            onPressed: () {
-              context.read<AuthProvider>().logout();
-            },
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Hapus'),
           ),
         ],
       ),
-      // <-- TAMBAHAN: Tombol Tambah Wisata khusus Admin
-      floatingActionButton: isAdmin
-          ? FloatingActionButton(
-              tooltip: 'Tambah Wisata',
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await provider.deleteWisata(wisata.id);
+      if (!mounted) return;
+      _snack('Destinasi berhasil dihapus.');
+    } catch (e) {
+      if (!mounted) return;
+      _snack(e.toString().replaceFirst('Exception: ', ''), isError: true);
+    }
+  }
+
+  void _resetAll(WisataProvider provider) {
+    _searchController.clear();
+    setState(() => _onlyFavorites = false);
+    provider.resetFilter();
+  }
+
+  // ------------------------------------------------------------------ build
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+
+    return Scaffold(
+      floatingActionButton: auth.isAdmin
+          ? FloatingActionButton.extended(
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const AddWisataScreen(),
-                  ),
+                  MaterialPageRoute(builder: (_) => const AddWisataScreen()),
                 );
               },
-              child: const Icon(Icons.add),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'Tambah Wisata',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
             )
           : null,
       body: Consumer<WisataProvider>(
         builder: (context, provider, child) {
-          final daftarWisata = provider.filteredWisata;
-          final error = provider.errorMessage;
+          final hasProvinceFilter = provider.selectedProvinsi != null &&
+              provider.selectedProvinsi!.isNotEmpty;
+          final hasCategoryFilter = provider.selectedKategori != null &&
+              provider.selectedKategori!.isNotEmpty;
+          final isFiltering = provider.searchQuery.isNotEmpty ||
+              hasProvinceFilter ||
+              hasCategoryFilter ||
+              _onlyFavorites;
 
-          return Column(
-            children: [
-              // Bagian pencarian
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextField(
-                  onChanged: provider.searchWisata,
-                  decoration: InputDecoration(
-                    hintText: 'Cari destinasi wisata...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                    ),
-                  ),
+          var list = provider.filteredWisata;
+          if (_onlyFavorites) {
+            list = list.where((w) => provider.isFavorite(w.id)).toList();
+          }
+
+          final recommendations = _recommendations(provider.daftarWisata);
+          final showRecommendations = !isFiltering &&
+              !provider.isLoading &&
+              recommendations.isNotEmpty;
+
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _buildHeader(auth, provider)),
+              SliverToBoxAdapter(
+                child: _buildFilterChips(
+                  provider,
+                  hasProvinceFilter,
+                  hasCategoryFilter,
                 ),
               ),
-
-              // Filter provinsi
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: DropdownButtonFormField<String>(
-                  initialValue: provider.selectedProvinsi == ''
-                      ? null
-                      : provider.selectedProvinsi,
-                  decoration: InputDecoration(
-                    labelText: 'Filter Provinsi',
-                    prefixIcon: const Icon(Icons.location_on_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+              if (showRecommendations) ...[
+                const SliverToBoxAdapter(
+                  child: _SectionTitle(
+                    title: 'Rekomendasi untuk kamu',
+                    trailing: 'Pilihan hari ini',
                   ),
-                  items: [
-                    const DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('Semua Provinsi'),
-                    ),
-                    ...provider.daftarProvinsi.map(
-                      (provinsi) => DropdownMenuItem<String>(
-                        value: provinsi,
-                        child: Text(provinsi),
+                ),
+                SliverToBoxAdapter(
+                  child: RecommendationCarousel(
+                    items: recommendations,
+                    isFavorite: provider.isFavorite,
+                    onToggleFavorite: (w) => _toggleFavorite(provider, w.id),
+                  ),
+                ),
+              ],
+              SliverToBoxAdapter(
+                child: _SectionTitle(
+                  title: _onlyFavorites ? 'Favoritmu' : 'Jelajahi Destinasi',
+                  trailing: provider.isLoading ? null : '${list.length} tempat',
+                ),
+              ),
+              ..._buildListSlivers(auth, provider, list, isFiltering),
+              const SliverToBoxAdapter(child: SizedBox(height: 110)),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ----------------------------------------------------------------- header
+
+  Widget _buildHeader(AuthProvider auth, WisataProvider provider) {
+    final name = _displayName(auth.user?.email);
+
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: AppColors.heroGradient,
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: Colors.white.withValues(alpha: 0.22),
+                    child: Text(
+                      name[0],
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 18,
                       ),
                     ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null || value.isEmpty) {
-                      provider.resetFilter();
-                    } else {
-                      provider.filterByProvinsi(value);
-                    }
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Judul daftar wisata
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Jelajahi Destinasi',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
                   ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Konten daftar wisata
-              Expanded(
-                child: _buildContent(
-                  provider,
-                  daftarWisata,
-                  error,
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildContent(
-    WisataProvider provider,
-    List<Wisata> daftarWisata,
-    String? error,
-  ) {
-    if (provider.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    if (error != null && error.isNotEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: Colors.red,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                error,
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (daftarWisata.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.travel_explore,
-              size: 60,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 12),
-            Text(
-              'Belum ada destinasi wisata.',
-              style: TextStyle(
-                fontSize: 16,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: daftarWisata.length,
-      itemBuilder: (context, index) {
-        final wisata = daftarWisata[index];
-
-        return _buildWisataCard(
-          context,
-          provider,
-          wisata,
-        );
-      },
-    );
-  }
-
-  Widget _buildWisataCard(
-    BuildContext context,
-    WisataProvider provider,
-    Wisata wisata,
-  ) {
-    final isFavorite = provider.isFavorite(wisata.id);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      clipBehavior: Clip.antiAlias,
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-      ),
-      // <-- TAMBAHAN: InkWell membungkus Column agar kartu bisa diklik ke WeatherScreen
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => WeatherScreen(
-                wisataId: wisata.id,
-                nama: wisata.nama,
-                provinsi: wisata.provinsi,
-                deskripsi: wisata.deskripsi,
-                gambarUrl: wisata.gambarUrl,
-                lat: wisata.lat,
-                lon: wisata.lon,
-              ),
-            ),
-          );
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Gambar wisata
-            if (wisata.gambarUrl.isNotEmpty)
-              Image.network(
-                wisata.gambarUrl,
-                height: 180,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return _imagePlaceholder();
-                },
-              )
-            else
-              _imagePlaceholder(),
-
-            // Informasi wisata
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          wisata.nama,
+                          'Halo, $name 👋',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
+                            color: Colors.white,
                             fontSize: 17,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.location_on,
-                              size: 16,
-                              color: Colors.grey,
+                        const SizedBox(height: 3),
+                        if (auth.isAdmin)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
                             ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                wisata.provinsi,
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                ),
+                            decoration: BoxDecoration(
+                              color: AppColors.coral,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Text(
+                              'PENGELOLA',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.6,
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          wisata.deskripsi,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          )
+                        else
+                          Text(
+                            'Pengunjung',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 12.5,
+                            ),
+                          ),
                       ],
                     ),
                   ),
-
-                  // Tombol favorit
-                  IconButton(
-                    tooltip: isFavorite
-                        ? 'Hapus dari favorit'
-                        : 'Tambahkan ke favorit',
-                    onPressed: () {
-                      provider.toggleFavorite(wisata.id);
-                    },
-                    icon: Icon(
-                      isFavorite
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      color: isFavorite ? Colors.red : Colors.grey,
+                  IconButton.filledTonal(
+                    tooltip: 'Logout',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
+                      foregroundColor: Colors.white,
                     ),
+                    icon: const Icon(Icons.logout_rounded),
+                    onPressed: () => context.read<AuthProvider>().logout(),
                   ),
                 ],
               ),
-            ),
-          ],
+              const SizedBox(height: 22),
+              const Text(
+                'Mau jelajah ke\nmana hari ini?',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  height: 1.15,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: _searchController,
+                onChanged: provider.searchWisata,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Cari pantai, gunung, candi...',
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Hapus pencarian',
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () {
+                            _searchController.clear();
+                            provider.searchWisata('');
+                          },
+                        ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _imagePlaceholder() {
-    return Container(
-      height: 180,
-      width: double.infinity,
-      color: Colors.grey.shade200,
-      child: const Icon(
-        Icons.image_not_supported_outlined,
-        size: 50,
-        color: Colors.grey,
+  // ---------------------------------------------------------- filter chips
+
+  Widget _buildFilterChips(
+    WisataProvider provider,
+    bool hasProvinceFilter,
+    bool hasCategoryFilter,
+  ) {
+    final kategoriTerpilih = provider.selectedKategori;
+
+    return SizedBox(
+      height: 62,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        children: [
+          _FilterChip(
+            label: 'Semua',
+            selected: !_onlyFavorites && !hasProvinceFilter && !hasCategoryFilter,
+            onTap: () => _resetAll(provider),
+          ),
+          for (final kategori in KategoriWisata.untukFilter) ...[
+            const SizedBox(width: 8),
+            _FilterChip(
+              label: kategori,
+              icon: KategoriWisata.ikon(kategori),
+              selected: kategoriTerpilih == kategori,
+              onTap: () => provider.filterByKategori(
+                kategoriTerpilih == kategori ? null : kategori,
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          _FilterChip(
+            label: hasProvinceFilter ? provider.selectedProvinsi! : 'Provinsi',
+            icon: Icons.map_outlined,
+            trailingIcon: Icons.keyboard_arrow_down_rounded,
+            selected: hasProvinceFilter,
+            onTap: () => _pilihProvinsi(provider),
+          ),
+          const SizedBox(width: 8),
+          _FilterChip(
+            label: 'Favorit',
+            icon: Icons.favorite_rounded,
+            iconColor: Colors.redAccent,
+            selected: _onlyFavorites,
+            onTap: () => setState(() => _onlyFavorites = !_onlyFavorites),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ------------------------------------------------------------------- list
+
+  List<Widget> _buildListSlivers(
+    AuthProvider auth,
+    WisataProvider provider,
+    List<Wisata> list,
+    bool isFiltering,
+  ) {
+    if (provider.isLoading) {
+      return [const SliverToBoxAdapter(child: WisataSkeleton())];
+    }
+
+    final error = provider.errorMessage;
+    if (error != null && error.isNotEmpty && provider.daftarWisata.isEmpty) {
+      return [
+        SliverToBoxAdapter(
+          child: EmptyState(
+            icon: Icons.cloud_off_rounded,
+            title: 'Oops, terjadi kendala',
+            subtitle: error,
+          ),
+        ),
+      ];
+    }
+
+    if (list.isEmpty) {
+      late final EmptyState empty;
+      if (_onlyFavorites) {
+        empty = const EmptyState(
+          icon: Icons.favorite_border_rounded,
+          title: 'Belum ada favorit',
+          subtitle: 'Ketuk ikon hati pada destinasi untuk menyimpannya di sini.',
+        );
+      } else if (isFiltering) {
+        empty = EmptyState(
+          icon: Icons.search_off_rounded,
+          title: 'Destinasi tidak ditemukan',
+          subtitle: 'Coba kata kunci atau provinsi yang lain.',
+          actionLabel: 'Reset filter',
+          onAction: () => _resetAll(provider),
+        );
+      } else {
+        empty = EmptyState(
+          icon: Icons.travel_explore_rounded,
+          title: 'Belum ada destinasi wisata',
+          subtitle: auth.isAdmin
+              ? 'Tekan tombol "Tambah Wisata" untuk menambahkan destinasi pertama.'
+              : 'Destinasi akan muncul di sini setelah pengelola menambahkannya.',
+        );
+      }
+      return [SliverToBoxAdapter(child: empty)];
+    }
+
+    return [
+      SliverPadding(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        sliver: SliverList.separated(
+          itemCount: list.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 14),
+          itemBuilder: (context, index) {
+            final wisata = list[index];
+            return WisataTile(
+              wisata: wisata,
+              isFavorite: provider.isFavorite(wisata.id),
+              onToggleFavorite: () => _toggleFavorite(provider, wisata.id),
+              // FR-09: tombol edit & hapus hanya untuk Admin
+              onEdit: auth.isAdmin ? () => _bukaEdit(wisata) : null,
+              onDelete:
+                  auth.isAdmin ? () => _confirmDelete(provider, wisata) : null,
+            );
+          },
+        ),
+      ),
+    ];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Widget pendukung (private)
+// ---------------------------------------------------------------------------
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title, this.trailing});
+
+  final String title;
+  final String? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+              ),
+            ),
+          ),
+          if (trailing != null)
+            Text(
+              trailing!,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+    this.iconColor = AppColors.teal,
+    this.trailingIcon,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final IconData? icon;
+  final Color iconColor;
+  final IconData? trailingIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = selected ? Colors.white : AppColors.ink;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      decoration: ShapeDecoration(
+        color: selected ? AppColors.teal : Colors.white,
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: selected ? AppColors.teal : AppColors.line,
+          ),
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: selected ? Colors.white : iconColor,
+                  ),
+                  const SizedBox(width: 6),
+                ],
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (trailingIcon != null) ...[
+                  const SizedBox(width: 2),
+                  Icon(trailingIcon, size: 18, color: fg),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
