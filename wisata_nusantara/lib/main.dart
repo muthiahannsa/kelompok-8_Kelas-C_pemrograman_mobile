@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'auth/auth_provider.dart';
 import 'auth/auth_wrapper.dart';
-import 'auth/notification_service.dart';
+import 'notifications/notification_service.dart';
 import 'wisata/wisata_provider.dart';
 import 'theme/app_theme.dart';
 import 'cuaca/weather_service.dart';

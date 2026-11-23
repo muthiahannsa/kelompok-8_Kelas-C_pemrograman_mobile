@@ -1,3 +1,4 @@
+import 'dart:async';   
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,25 +10,35 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   String _role = 'user'; // Default role untuk Authorization
   bool _isLoading = false;
+  StreamSubscription<User?>? _authSub;
 
   User? get user => _user;
   String get role => _role;
   bool get isLoading => _isLoading;
   bool get isAdmin => _role == 'admin';
 
-AuthProvider() {
-    _auth.authStateChanges().listen((user) async {
+  AuthProvider() {
+    _authSub = _auth.authStateChanges().listen((user) async {
       _user = user;
-      if (user != null) {
-        final doc = await _firestore.collection('users').doc(user.uid).get();
-        if (doc.exists && doc.data() != null) {
-          _role = (doc.data() as Map<String, dynamic>)['role'] ?? 'user';
-        }
-      } else {
+      if (user == null) {
         _role = 'user';
+      } else {
+        try {
+          final doc =
+              await _firestore.collection('users').doc(user.uid).get();
+          _role = (doc.data()?['role'] as String?) ?? 'user';
+        } catch (_) {
+          _role = 'user';
+        }
       }
       notifyListeners();
     });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   // Fungsi Register (Membuat akun baru + menyimpan role di Firestore)

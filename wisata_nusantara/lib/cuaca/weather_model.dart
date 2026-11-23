@@ -1,4 +1,3 @@
-
 class WeatherModel {
   final double temperature;
   final String description;
@@ -26,7 +25,15 @@ class WeatherModel {
           ? weather[0]['icon'] as String
           : '01d',
       humidity: (json['main']['humidity'] as num).toInt(),
-      windSpeed: (json['wind']['speed'] as num).toDouble(),
+      windSpeed: (json['wind']['speed'] as num).toDouble(),      
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'main': {'temp': temperature, 'humidity': humidity},
+        'weather': [
+          {'description': description, 'icon': icon}
+        ],
+        'wind': {'speed': windSpeed},
+      };
 }
