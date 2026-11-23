@@ -6,14 +6,9 @@ import 'auth/auth_provider.dart';
 import 'auth/auth_wrapper.dart';
 import 'auth/notification_service.dart';
 import 'wisata/wisata_provider.dart';
-<<<<<<< HEAD
-import 'wisata/rating_provider.dart';
-import 'cuaca/weather_service.dart';
-=======
 import 'theme/app_theme.dart';
 import 'cuaca/weather_service.dart';
 import 'wisata/rating_provider.dart';
->>>>>>> b801540 (Memastikan struktur data Firestore tetap cocok dengan data lama)
 
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
