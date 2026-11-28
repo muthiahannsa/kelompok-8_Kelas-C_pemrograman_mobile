@@ -12,6 +12,7 @@ import 'wisata/rating_provider.dart';
 
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,9 +21,16 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  await NotificationService().initNotification(rootScaffoldMessengerKey);
+  await NotificationService().initNotification(
+    rootScaffoldMessengerKey,
+    navigatorKey: rootNavigatorKey,
+  );
 
   runApp(const MyApp());
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    NotificationService().checkInitialMessage();
+  });
 }
 
 class MyApp extends StatelessWidget {
@@ -38,6 +46,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => RatingProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: rootNavigatorKey,
         scaffoldMessengerKey: rootScaffoldMessengerKey,
         title: 'Wisata Nusantara',
         debugShowCheckedModeBanner: false,

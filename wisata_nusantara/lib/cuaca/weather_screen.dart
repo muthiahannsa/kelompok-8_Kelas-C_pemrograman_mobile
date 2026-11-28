@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../notifications/notification_service.dart';
 import '../wisata/gambar_wisata.dart';
 import '../wisata/rating_widget.dart';
 
@@ -31,18 +32,39 @@ class WeatherScreen extends StatefulWidget {
 }
 
 class _WeatherScreenState extends State<WeatherScreen> {
+  bool _weatherWarned = false;
+
   @override
   void initState() {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
-      context.read<WeatherService>().fetchWeather(
-            lat: widget.lat,
-            lon: widget.lon,
-          );
+      _loadWeather();
     });
+  }
+
+  bool _isSevereWeather(String description, double windSpeed) {
+    final desc = description.toLowerCase();
+    const keywords = ['hujan', 'badai', 'petir', 'gerimis', 'rain', 'storm'];
+    return keywords.any(desc.contains) || windSpeed >= 10;
+  }
+
+  Future<void> _loadWeather() async {
+    final service = context.read<WeatherService>();
+    await service.fetchWeather(lat: widget.lat, lon: widget.lon);
+    if (!mounted || _weatherWarned) return;
+
+    final weather = service.weather;
+    if (weather != null &&
+        _isSevereWeather(weather.description, weather.windSpeed)) {
+      _weatherWarned = true;
+      await NotificationService().showWeatherWarning(
+        weather.description,
+        lokasi: widget.nama,
+        wisataId: widget.wisataId,
+      );
+    }
   }
 
   @override
@@ -120,12 +142,7 @@ class _WeatherScreenState extends State<WeatherScreen> {
                             Text(service.errorMessage!),
                             const SizedBox(height: 12),
                             ElevatedButton(
-                              onPressed: () {
-                                service.fetchWeather(
-                                  lat: widget.lat,
-                                  lon: widget.lon,
-                                );
-                              },
+                              onPressed: _loadWeather,
                               child: const Text('Coba Lagi'),
                             ),
                           ],
