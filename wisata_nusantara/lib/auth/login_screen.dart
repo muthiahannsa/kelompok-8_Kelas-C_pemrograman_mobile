@@ -21,7 +21,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoginMode = true;
   bool _obscurePassword = true;
-  String _selectedRole = 'user';
 
   @override
   void dispose() {
@@ -39,45 +38,42 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
- 
-Future<void> _submit() async {
-  FocusScope.of(context).unfocus();
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
 
-  final authProvider = context.read<AuthProvider>();
+    final authProvider = context.read<AuthProvider>();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
 
-  // Sanitasi email sebelum diproses
-  final email = InputSanitizer.sanitizeEmail(
-    _emailController.text,
-  );
+    // FR-05: kolom kosong -> Snackbar
+    if (email.isEmpty || password.isEmpty) {
+      _showSnack('Email dan password wajib diisi!', isError: true);
+      return;
+    }
 
-  // Password tidak boleh diubah dengan trim()
-  final password = _passwordController.text;
+    // Validasi format (inline di bawah kolom)
+    if (!_formKey.currentState!.validate()) return;
 
-  // Validasi kolom kosong
-  if (email.isEmpty || password.isEmpty) {
-    _showSnack(
-      'Email dan password wajib diisi!',
-      isError: true,
-    );
-    return;
-  }
+    String? errorMessage;
+    if (_isLoginMode) {
+      errorMessage = await authProvider.login(
+        email: email,
+        password: password,
+      );
+    } else {
+      errorMessage = await authProvider.register(
+        email: email,
+        password: password,
+      );
+    }
 
-  // Validasi format email
-  if (!_formKey.currentState!.validate()) return;
+    if (!mounted) return;
 
-  String? errorMessage;
-
-  if (_isLoginMode) {
-    errorMessage = await authProvider.login(
-      email: email,
-      password: password,
-    );
-  } else {
-    errorMessage = await authProvider.register(
-      email: email,
-      password: password,
-      role: _selectedRole,
-    );
+    if (errorMessage != null) {
+      _showSnack('Gagal: $errorMessage', isError: true);
+    } else {
+      _showSnack('Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!');
+    }
   }
 
   if (!mounted) return;
@@ -284,17 +280,6 @@ Future<void> _submit() async {
                 return null;
               },
             ),
-            AnimatedSize(
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOutCubic,
-              alignment: Alignment.topCenter,
-              child: _isLoginMode
-                  ? const SizedBox(width: double.infinity, height: 0)
-                  : Padding(
-                      padding: const EdgeInsets.only(top: 18),
-                      child: _buildRoleSelector(),
-                    ),
-            ),
             const SizedBox(height: 22),
             SizedBox(
               height: 54,
@@ -326,49 +311,6 @@ Future<void> _submit() async {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildRoleSelector() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Daftar sebagai',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: AppColors.muted,
-          ),
-        ),
-        const SizedBox(height: 10),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: _RoleOption(
-                  icon: Icons.backpack_rounded,
-                  title: 'Pengunjung',
-                  subtitle: 'Cari & simpan wisata',
-                  selected: _selectedRole == 'user',
-                  onTap: () => setState(() => _selectedRole = 'user'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _RoleOption(
-                  icon: Icons.admin_panel_settings_rounded,
-                  title: 'Pengelola',
-                  subtitle: 'Kelola data wisata',
-                  selected: _selectedRole == 'admin',
-                  onTap: () => setState(() => _selectedRole = 'admin'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }
@@ -530,80 +472,6 @@ class _ToggleLabel extends StatelessWidget {
             color: selected ? AppColors.teal : AppColors.muted,
           ),
           child: Text(label),
-        ),
-      ),
-    );
-  }
-}
-
-class _RoleOption extends StatelessWidget {
-  const _RoleOption({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.teal.withValues(alpha: 0.08)
-              : const Color(0xFFF7FAF9),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: selected ? AppColors.teal : AppColors.line,
-            width: 1.6,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 22,
-                  color: selected ? AppColors.teal : AppColors.muted,
-                ),
-                const Spacer(),
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: selected ? 1 : 0,
-                  child: const Icon(
-                    Icons.check_circle_rounded,
-                    size: 20,
-                    color: AppColors.teal,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              title,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: const TextStyle(color: AppColors.muted, fontSize: 11.5),
-            ),
-          ],
         ),
       ),
     );

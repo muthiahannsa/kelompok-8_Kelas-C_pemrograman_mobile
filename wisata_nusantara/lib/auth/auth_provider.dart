@@ -42,46 +42,36 @@ class AuthProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  // Fungsi Register (Membuat akun baru + menyimpan role di Firestore)
-Future<String?> register({
-  required String email,
-  required String password,
-  required String role,
-}) async {
-  final cleanEmail = InputSanitizer.sanitizeEmail(email);
+  // Fungsi Register (Membuat akun baru dengan role otomatis 'user')
+  Future<String?> register({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      _isLoading = true;
+      notifyListeners();
 
-  if (!InputSanitizer.isValidEmail(cleanEmail)) {
-    return 'Format email tidak valid';
-  }
+      UserCredential cred = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-  try {
-    _isLoading = true;
-    notifyListeners();
+      // Semua akun baru otomatis ber-role 'user' (admin hanya diubah manual di Console)
+      await _firestore.collection('users').doc(cred.user!.uid).set({
+        'email': email,
+        'role': 'user',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
 
-    UserCredential cred = await _auth.createUserWithEmailAndPassword(
-      email: cleanEmail,
-      password: password,
-    );
-
-    // Kirim email verifikasi
-    await cred.user!.sendEmailVerification();
-
-    // Simpan data pengguna ke Firestore
-    await _firestore.collection('users').doc(cred.user!.uid).set({
-      'email': cleanEmail,
-      'role': 'user',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    // Keluar sementara sampai email diverifikasi
-    return null;
-  } on FirebaseAuthException catch (e) {
-    return e.message;
-  } catch (e) {
-    return 'Terjadi kesalahan: $e';
-  } finally {
-    _isLoading = false;
-    notifyListeners();
+      _user = cred.user;
+      _role = 'user';
+      return null; // Berhasil (tidak ada pesan error)
+    } on FirebaseAuthException catch (e) {
+      return e.message;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 }
 
@@ -94,13 +84,12 @@ Future<String?> login({
 }) async {
   final cleanEmail = InputSanitizer.sanitizeEmail(email);
 
-  if (!InputSanitizer.isValidEmail(cleanEmail)) {
-    return 'Format email tidak valid';
-  }
+      // Ambil role user dari Firestore (Authorization)
+      final doc =
+          await _firestore.collection('users').doc(cred.user!.uid).get();
 
-  try {
-    _isLoading = true;
-    notifyListeners();
+      _user = cred.user;
+      _role = (doc.data()?['role'] as String?) ?? 'user';
 
     UserCredential cred = await _auth.signInWithEmailAndPassword(
       email: cleanEmail,
