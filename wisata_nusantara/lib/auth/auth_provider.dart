@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../utils/input_sanitizer.dart';
 
 class AuthProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -18,7 +19,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isAdmin => _role == 'admin';
 
   AuthProvider() {
-    _authSub = _auth.authStateChanges().listen((user) async {
+    _authSub = _auth.userChanges().listen((user) async {
       _user = user;
       if (user == null) {
         _role = 'user';
@@ -42,69 +43,114 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // Fungsi Register (Membuat akun baru + menyimpan role di Firestore)
-  Future<String?> register({
-    required String email,
-    required String password,
-    required String role, // 'admin' atau 'user'
-  }) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+Future<String?> register({
+  required String email,
+  required String password,
+  required String role,
+}) async {
+  final cleanEmail = InputSanitizer.sanitizeEmail(email);
 
-      UserCredential cred = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
-
-      // Simpan data role ke Firestore untuk keperluan Authorization
-      await _firestore.collection('users').doc(cred.user!.uid).set({
-        'email': email,
-        'role': role,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-      _user = cred.user;
-      _role = role;
-      return null; // Berhasil (tidak ada pesan error)
-    } on FirebaseAuthException catch (e) {
-      return e.message;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+  if (!InputSanitizer.isValidEmail(cleanEmail)) {
+    return 'Format email tidak valid';
   }
+
+  try {
+    _isLoading = true;
+    notifyListeners();
+
+    UserCredential cred = await _auth.createUserWithEmailAndPassword(
+      email: cleanEmail,
+      password: password,
+    );
+
+    // Kirim email verifikasi
+    await cred.user!.sendEmailVerification();
+
+    // Simpan data pengguna ke Firestore
+    await _firestore.collection('users').doc(cred.user!.uid).set({
+      'email': cleanEmail,
+      'role': 'user',
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Keluar sementara sampai email diverifikasi
+    return null;
+  } on FirebaseAuthException catch (e) {
+    return e.message;
+  } catch (e) {
+    return 'Terjadi kesalahan: $e';
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+}
 
   // Fungsi Login (Cek email/password + ambil role dari Firestore)
-  Future<String?> login({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      _isLoading = true;
-      notifyListeners();
+  
 
-      UserCredential cred = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+Future<String?> login({
+  required String email,
+  required String password,
+}) async {
+  final cleanEmail = InputSanitizer.sanitizeEmail(email);
 
-      // Ambil role user dari Firestore (Authorization)
-      DocumentSnapshot doc =
-          await _firestore.collection('users').doc(cred.user!.uid).get();
-
-      _user = cred.user;
-      if (doc.exists && doc.data() != null) {
-        _role = (doc.data() as Map<String, dynamic>)['role'] ?? 'user';
-      }
-
-      return null; // Berhasil
-    } on FirebaseAuthException catch (e) {
-      return e.message;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
+  if (!InputSanitizer.isValidEmail(cleanEmail)) {
+    return 'Format email tidak valid';
   }
+
+  try {
+    _isLoading = true;
+    notifyListeners();
+
+    UserCredential cred = await _auth.signInWithEmailAndPassword(
+      email: cleanEmail,
+      password: password,
+    );
+
+    // Perbarui status verifikasi dari Firebase
+    await cred.user!.reload();
+
+    final currentUser = _auth.currentUser;
+
+    if (currentUser == null) {
+      return 'Gagal memeriksa status akun';
+    }
+
+    // Periksa apakah email sudah diverifikasi
+    if (!currentUser.emailVerified) {
+      // Kirim ulang email verifikasi
+      await currentUser.sendEmailVerification();
+
+      await _auth.signOut();
+
+      _user = null;
+      _role = 'user';
+
+      return 'Email belum diverifikasi. Link verifikasi telah dikirim ulang. Periksa inbox email kamu.';
+    }
+
+    // Ambil role pengguna dari Firestore
+    DocumentSnapshot doc =
+        await _firestore.collection('users').doc(currentUser.uid).get();
+
+    _user = currentUser;
+
+    if (doc.exists && doc.data() != null) {
+      _role = (doc.data() as Map<String, dynamic>)['role'] ?? 'user';
+    } else {
+      _role = 'user';
+    }
+
+    return null;
+  } on FirebaseAuthException catch (e) {
+    return e.message;
+  } catch (e) {
+    return 'Terjadi kesalahan: $e';
+  } finally {
+    _isLoading = false;
+    notifyListeners();
+  }
+}
 
   // Fungsi Logout
   Future<void> logout() async {

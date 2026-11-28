@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/input_sanitizer.dart';
 import 'auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -38,44 +39,61 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _submit() async {
-    FocusScope.of(context).unfocus();
+ 
+Future<void> _submit() async {
+  FocusScope.of(context).unfocus();
 
-    final authProvider = context.read<AuthProvider>();
-    final email = _emailController.text.trim();
-    final password = _passwordController.text.trim();
+  final authProvider = context.read<AuthProvider>();
 
-    // FR-05: kolom kosong -> Snackbar
-    if (email.isEmpty || password.isEmpty) {
-      _showSnack('Email dan password wajib diisi!', isError: true);
-      return;
-    }
+  // Sanitasi email sebelum diproses
+  final email = InputSanitizer.sanitizeEmail(
+    _emailController.text,
+  );
 
-    // Validasi format (inline di bawah kolom)
-    if (!_formKey.currentState!.validate()) return;
+  // Password tidak boleh diubah dengan trim()
+  final password = _passwordController.text;
 
-    String? errorMessage;
-    if (_isLoginMode) {
-      errorMessage = await authProvider.login(
-        email: email,
-        password: password,
-      );
-    } else {
-      errorMessage = await authProvider.register(
-        email: email,
-        password: password,
-        role: _selectedRole,
-      );
-    }
-
-    if (!mounted) return;
-
-    if (errorMessage != null) {
-      _showSnack('Gagal: $errorMessage', isError: true);
-    } else {
-      _showSnack('Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!');
-    }
+  // Validasi kolom kosong
+  if (email.isEmpty || password.isEmpty) {
+    _showSnack(
+      'Email dan password wajib diisi!',
+      isError: true,
+    );
+    return;
   }
+
+  // Validasi format email
+  if (!_formKey.currentState!.validate()) return;
+
+  String? errorMessage;
+
+  if (_isLoginMode) {
+    errorMessage = await authProvider.login(
+      email: email,
+      password: password,
+    );
+  } else {
+    errorMessage = await authProvider.register(
+      email: email,
+      password: password,
+      role: _selectedRole,
+    );
+  }
+
+  if (!mounted) return;
+
+  if (errorMessage != null) {
+  _showSnack('Gagal: $errorMessage', isError: true);
+} else if (_isLoginMode) {
+  _showSnack(
+    'Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!'
+  );
+} else {
+  _showSnack(
+    'Registrasi berhasil! Silakan periksa email untuk verifikasi.'
+  );
+}
+}
 
   @override
   Widget build(BuildContext context) {
@@ -221,12 +239,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 prefixIcon: Icon(Icons.mail_outline_rounded),
               ),
               validator: (value) {
-                final v = value?.trim() ?? '';
-                if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v)) {
+                final email = InputSanitizer.sanitizeEmail(value ?? '');
+
+                if (email.isEmpty) {
+                  return 'Email tidak boleh kosong';
+                  }
+
+                if (!InputSanitizer.isValidEmail(email)) {
                   return 'Format email tidak valid';
-                }
+                  }
+
                 return null;
-              },
+                  },
             ),
             const SizedBox(height: 14),
             TextFormField(
