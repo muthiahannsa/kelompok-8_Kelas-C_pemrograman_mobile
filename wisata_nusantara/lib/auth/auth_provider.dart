@@ -41,11 +41,10 @@ class AuthProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  // Fungsi Register (Membuat akun baru + menyimpan role di Firestore)
+  // Fungsi Register (Membuat akun baru dengan role otomatis 'user')
   Future<String?> register({
     required String email,
     required String password,
-    required String role, // 'admin' atau 'user'
   }) async {
     try {
       _isLoading = true;
@@ -56,15 +55,15 @@ class AuthProvider extends ChangeNotifier {
         password: password,
       );
 
-      // Simpan data role ke Firestore untuk keperluan Authorization
+      // Semua akun baru otomatis ber-role 'user' (admin hanya diubah manual di Console)
       await _firestore.collection('users').doc(cred.user!.uid).set({
         'email': email,
-        'role': role,
+        'role': 'user',
         'createdAt': FieldValue.serverTimestamp(),
       });
 
       _user = cred.user;
-      _role = role;
+      _role = 'user';
       return null; // Berhasil (tidak ada pesan error)
     } on FirebaseAuthException catch (e) {
       return e.message;
@@ -89,13 +88,11 @@ class AuthProvider extends ChangeNotifier {
       );
 
       // Ambil role user dari Firestore (Authorization)
-      DocumentSnapshot doc =
+      final doc =
           await _firestore.collection('users').doc(cred.user!.uid).get();
 
       _user = cred.user;
-      if (doc.exists && doc.data() != null) {
-        _role = (doc.data() as Map<String, dynamic>)['role'] ?? 'user';
-      }
+      _role = (doc.data()?['role'] as String?) ?? 'user';
 
       return null; // Berhasil
     } on FirebaseAuthException catch (e) {
