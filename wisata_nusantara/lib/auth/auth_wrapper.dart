@@ -1,6 +1,9 @@
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
+
 import 'login_screen.dart';
+import 'verification_screen.dart';
 import '../wisata/home_screen.dart';
 
 class AuthWrapper extends StatelessWidget {
@@ -9,19 +12,27 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+      stream: FirebaseAuth.instance.userChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
           );
         }
 
-        if (snapshot.hasData) {
-          return const HomeScreen();
+        final user = snapshot.data;
+
+        if (user == null) {
+          return const LoginScreen();
         }
 
-        return const LoginScreen();
+        if (!user.emailVerified) {
+          return const VerificationScreen();
+        }
+
+        return const HomeScreen();
       },
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../theme/app_theme.dart';
+import '../utils/input_sanitizer.dart';
 import 'auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -74,6 +75,21 @@ class _LoginScreenState extends State<LoginScreen> {
       _showSnack('Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!');
     }
   }
+
+  if (!mounted) return;
+
+  if (errorMessage != null) {
+  _showSnack('Gagal: $errorMessage', isError: true);
+} else if (_isLoginMode) {
+  _showSnack(
+    'Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!'
+  );
+} else {
+  _showSnack(
+    'Registrasi berhasil! Silakan periksa email untuk verifikasi.'
+  );
+}
+}
 
   @override
   Widget build(BuildContext context) {
@@ -219,12 +235,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 prefixIcon: Icon(Icons.mail_outline_rounded),
               ),
               validator: (value) {
-                final v = value?.trim() ?? '';
-                if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v)) {
+                final email = InputSanitizer.sanitizeEmail(value ?? '');
+
+                if (email.isEmpty) {
+                  return 'Email tidak boleh kosong';
+                  }
+
+                if (!InputSanitizer.isValidEmail(email)) {
                   return 'Format email tidak valid';
-                }
+                  }
+
                 return null;
-              },
+                  },
             ),
             const SizedBox(height: 14),
             TextFormField(
