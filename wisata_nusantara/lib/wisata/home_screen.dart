@@ -1,9 +1,11 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../auth/auth_provider.dart';
+import '../notifications/notification_service.dart';
 import '../theme/app_theme.dart';
 import 'add_wisata_screen.dart';
 import 'kategori.dart';
@@ -174,6 +176,136 @@ class _HomeScreenState extends State<HomeScreen> {
     provider.resetFilter();
   }
 
+  Future<void> _salinFcmToken() async {
+    final token = NotificationService().fcmToken;
+    if (token == null || token.isEmpty) {
+      _snack('FCM Token belum tersedia di perangkat ini.', isError: true);
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: token));
+    if (!mounted) return;
+    _snack('FCM Token berhasil disalin.');
+  }
+
+  Future<void> _bukaRiwayatNotifikasi() async {
+    final notifService = NotificationService();
+    notifService.markAllAsRead();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.72,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'Notifikasi',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      TextButton.icon(
+                        onPressed: _salinFcmToken,
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Salin Token'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () => notifService.showTestNotification(),
+                        icon: const Icon(
+                          Icons.notifications_active_outlined,
+                          size: 16,
+                        ),
+                        label: const Text('Uji Notif'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Flexible(
+                    child: ValueListenableBuilder<List<AppNotification>>(
+                      valueListenable: notifService.historyNotifier,
+                      builder: (context, items, _) {
+                        if (items.isEmpty) {
+                          return const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 32),
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.notifications_none_rounded,
+                                    size: 44,
+                                    color: AppColors.muted,
+                                  ),
+                                  SizedBox(height: 10),
+                                  Text(
+                                    'Belum ada notifikasi',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                    ),
+                                  ),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Push notification atau peringatan cuaca akan muncul di sini.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: AppColors.muted,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: items.length,
+                          separatorBuilder: (_, _) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final item = items[index];
+                            return _NotificationTile(
+                              item: item,
+                              onTap: item.wisataId == null
+                                  ? null
+                                  : () {
+                                      Navigator.pop(sheetContext);
+                                      notifService.openWisataById(
+                                        item.wisataId,
+                                      );
+                                    },
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // ------------------------------------------------------------------ build
 
   @override
@@ -335,6 +467,25 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  ValueListenableBuilder<List<AppNotification>>(
+                    valueListenable: NotificationService().historyNotifier,
+                    builder: (context, items, _) {
+                      final unread = items.where((e) => !e.isRead).length;
+                      return IconButton.filledTonal(
+                        tooltip: 'Notifikasi',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: Badge(
+                          isLabelVisible: unread > 0,
+                          child: const Icon(Icons.notifications_outlined),
+                        ),
+                        onPressed: _bukaRiwayatNotifikasi,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
                   IconButton.filledTonal(
                     tooltip: 'Logout',
                     style: IconButton.styleFrom(
@@ -622,6 +773,55 @@ class _FilterChip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _NotificationTile extends StatelessWidget {
+  const _NotificationTile({required this.item, this.onTap});
+
+  final AppNotification item;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (item.type) {
+      'cuaca' => (Icons.thunderstorm_outlined, Colors.orange.shade700),
+      'test' => (Icons.science_outlined, AppColors.teal),
+      _ => (Icons.notifications_active_outlined, AppColors.teal),
+    };
+
+    final hh = item.timestamp.hour.toString().padLeft(2, '0');
+    final mm = item.timestamp.minute.toString().padLeft(2, '0');
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      leading: CircleAvatar(
+        backgroundColor: color.withValues(alpha: 0.12),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      title: Text(
+        item.title,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+      ),
+      subtitle: Text(
+        item.body,
+        style: const TextStyle(fontSize: 13),
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$hh:$mm',
+            style: const TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded, color: AppColors.muted),
+          ],
+        ],
+      ),
+      onTap: onTap,
     );
   }
 }
