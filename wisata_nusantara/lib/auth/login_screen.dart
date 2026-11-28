@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -45,16 +46,20 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // FR-05: kolom kosong -> Snackbar
+    // FR-05: Kolom kosong
     if (email.isEmpty || password.isEmpty) {
-      _showSnack('Email dan password wajib diisi!', isError: true);
+      _showSnack(
+        'Email dan password wajib diisi!',
+        isError: true,
+      );
       return;
     }
 
-    // Validasi format (inline di bawah kolom)
+    // Validasi format email dan password
     if (!_formKey.currentState!.validate()) return;
 
     String? errorMessage;
+
     if (_isLoginMode) {
       errorMessage = await authProvider.login(
         email: email,
@@ -70,30 +75,27 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
 
     if (errorMessage != null) {
-      _showSnack('Gagal: $errorMessage', isError: true);
+      _showSnack(
+        'Gagal: $errorMessage',
+        isError: true,
+      );
+    } else if (_isLoginMode) {
+      _showSnack(
+        'Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!',
+      );
     } else {
-      _showSnack('Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!');
+      _showSnack(
+        'Registrasi berhasil! Silakan periksa email untuk verifikasi.',
+      );
     }
   }
 
-  if (!mounted) return;
-
-  if (errorMessage != null) {
-  _showSnack('Gagal: $errorMessage', isError: true);
-} else if (_isLoginMode) {
-  _showSnack(
-    'Berhasil masuk sebagai ${authProvider.role.toUpperCase()}!'
-  );
-} else {
-  _showSnack(
-    'Registrasi berhasil! Silakan periksa email untuk verifikasi.'
-  );
-}
-}
-
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.select<AuthProvider, bool>((a) => a.isLoading);
+    final isLoading = context.select<AuthProvider, bool>(
+      (a) => a.isLoading,
+    );
+
     final screenHeight = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
@@ -206,7 +208,11 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             _ModeToggle(
               isLogin: _isLoginMode,
-              onChanged: (value) => setState(() => _isLoginMode = value),
+              onChanged: (value) {
+                setState(() {
+                  _isLoginMode = value;
+                });
+              },
             ),
             const SizedBox(height: 22),
             Text(
@@ -221,9 +227,14 @@ class _LoginScreenState extends State<LoginScreen> {
               _isLoginMode
                   ? 'Temukan destinasi & cek cuacanya sebelum berangkat.'
                   : 'Simpan destinasi favoritmu di mana saja.',
-              style: const TextStyle(color: AppColors.muted, fontSize: 13),
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 20),
+
+            // Email
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
@@ -235,20 +246,23 @@ class _LoginScreenState extends State<LoginScreen> {
                 prefixIcon: Icon(Icons.mail_outline_rounded),
               ),
               validator: (value) {
-                final email = InputSanitizer.sanitizeEmail(value ?? '');
+                final email =
+                    InputSanitizer.sanitizeEmail(value ?? '');
 
                 if (email.isEmpty) {
                   return 'Email tidak boleh kosong';
-                  }
+                }
 
                 if (!InputSanitizer.isValidEmail(email)) {
                   return 'Format email tidak valid';
-                  }
+                }
 
                 return null;
-                  },
+              },
             ),
             const SizedBox(height: 14),
+
+            // Password
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
@@ -258,7 +272,9 @@ class _LoginScreenState extends State<LoginScreen> {
               decoration: InputDecoration(
                 hintText: 'Password',
                 fillColor: _fieldFill,
-                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                prefixIcon: const Icon(
+                  Icons.lock_outline_rounded,
+                ),
                 suffixIcon: IconButton(
                   tooltip: _obscurePassword
                       ? 'Tampilkan password'
@@ -268,19 +284,26 @@ class _LoginScreenState extends State<LoginScreen> {
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
                   ),
-                  onPressed: () =>
-                      setState(() => _obscurePassword = !_obscurePassword),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
                 ),
               ),
               validator: (value) {
                 final v = value?.trim() ?? '';
+
                 if (!_isLoginMode && v.length < 6) {
                   return 'Password minimal 6 karakter';
                 }
+
                 return null;
               },
             ),
             const SizedBox(height: 22),
+
+            // Tombol Masuk / Daftar
             SizedBox(
               height: 54,
               child: ElevatedButton(
@@ -294,13 +317,21 @@ class _LoginScreenState extends State<LoginScreen> {
                           color: Colors.white,
                         ),
                       )
-                    : Text(_isLoginMode ? 'Masuk' : 'Buat Akun'),
+                    : Text(
+                        _isLoginMode ? 'Masuk' : 'Buat Akun',
+                      ),
               ),
             ),
             const SizedBox(height: 6),
+
+            // Ganti mode
             Center(
               child: TextButton(
-                onPressed: () => setState(() => _isLoginMode = !_isLoginMode),
+                onPressed: () {
+                  setState(() {
+                    _isLoginMode = !_isLoginMode;
+                  });
+                },
                 child: Text(
                   _isLoginMode
                       ? 'Belum punya akun? Daftar di sini'
@@ -338,27 +369,51 @@ class _HeroBackground extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          Positioned(top: -60, right: -40, child: _Circle(size: 200, color: soft)),
-          Positioned(top: 130, left: -60, child: _Circle(size: 150, color: soft)),
+          Positioned(
+            top: -60,
+            right: -40,
+            child: _Circle(size: 200, color: soft),
+          ),
+          Positioned(
+            top: 130,
+            left: -60,
+            child: _Circle(size: 150, color: soft),
+          ),
           Positioned(
             top: 64,
             left: 28,
-            child: Icon(Icons.wb_sunny_rounded, size: 34, color: icon),
+            child: Icon(
+              Icons.wb_sunny_rounded,
+              size: 34,
+              color: icon,
+            ),
           ),
           Positioned(
             top: 90,
             right: 34,
-            child: Icon(Icons.cloud_rounded, size: 40, color: icon),
+            child: Icon(
+              Icons.cloud_rounded,
+              size: 40,
+              color: icon,
+            ),
           ),
           Positioned(
             bottom: 56,
             left: 36,
-            child: Icon(Icons.sailing_rounded, size: 40, color: icon),
+            child: Icon(
+              Icons.sailing_rounded,
+              size: 40,
+              color: icon,
+            ),
           ),
           Positioned(
             bottom: 40,
             right: 28,
-            child: Icon(Icons.landscape_rounded, size: 64, color: icon),
+            child: Icon(
+              Icons.landscape_rounded,
+              size: 64,
+              color: icon,
+            ),
           ),
         ],
       ),
@@ -367,7 +422,10 @@ class _HeroBackground extends StatelessWidget {
 }
 
 class _Circle extends StatelessWidget {
-  const _Circle({required this.size, required this.color});
+  const _Circle({
+    required this.size,
+    required this.color,
+  });
 
   final double size;
   final Color color;
@@ -377,14 +435,20 @@ class _Circle extends StatelessWidget {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+      ),
     );
   }
 }
 
-/// Toggle pill "Masuk | Daftar" dengan indikator yang bergeser halus.
+// Toggle Masuk dan Daftar
 class _ModeToggle extends StatelessWidget {
-  const _ModeToggle({required this.isLogin, required this.onChanged});
+  const _ModeToggle({
+    required this.isLogin,
+    required this.onChanged,
+  });
 
   final bool isLogin;
   final ValueChanged<bool> onChanged;
@@ -404,7 +468,8 @@ class _ModeToggle extends StatelessWidget {
           AnimatedAlign(
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
-            alignment: isLogin ? Alignment.centerLeft : Alignment.centerRight,
+            alignment:
+                isLogin ? Alignment.centerLeft : Alignment.centerRight,
             child: FractionallySizedBox(
               widthFactor: 0.5,
               heightFactor: 1,
@@ -478,9 +543,11 @@ class _ToggleLabel extends StatelessWidget {
   }
 }
 
-/// Animasi masuk: fade + geser ke atas saat halaman pertama dibuka.
+// Animasi masuk halaman
 class _FadeSlideIn extends StatelessWidget {
-  const _FadeSlideIn({required this.child});
+  const _FadeSlideIn({
+    required this.child,
+  });
 
   final Widget child;
 
