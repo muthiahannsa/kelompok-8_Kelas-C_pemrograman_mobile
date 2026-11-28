@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "com.example.wisata_nusantara"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
