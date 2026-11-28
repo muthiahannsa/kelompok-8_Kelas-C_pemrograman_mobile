@@ -188,6 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _bukaRiwayatNotifikasi() async {
+    final isAdmin = context.read<AuthProvider>().isAdmin;
     final notifService = NotificationService();
     notifService.markAllAsRead();
 
@@ -219,19 +220,21 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
-                      TextButton.icon(
-                        onPressed: _salinFcmToken,
-                        icon: const Icon(Icons.copy_rounded, size: 16),
-                        label: const Text('Salin Token'),
-                      ),
-                      FilledButton.tonalIcon(
-                        onPressed: () => notifService.showTestNotification(),
-                        icon: const Icon(
-                          Icons.notifications_active_outlined,
-                          size: 16,
+                      if (isAdmin) ...[
+                        TextButton.icon(
+                          onPressed: _salinFcmToken,
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: const Text('Salin Token'),
                         ),
-                        label: const Text('Uji Notif'),
-                      ),
+                        FilledButton.tonalIcon(
+                          onPressed: () => notifService.showTestNotification(),
+                          icon: const Icon(
+                            Icons.notifications_active_outlined,
+                            size: 16,
+                          ),
+                          label: const Text('Uji Notif'),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 8),
