@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import '../config/api_keys.dart';
 import 'weather_model.dart';
 
 class WeatherService extends ChangeNotifier {
@@ -11,9 +12,7 @@ class WeatherService extends ChangeNotifier {
   bool isLoading = false;
   String? errorMessage;
 
-  static const String _apiKey = String.fromEnvironment(
-    'OPENWEATHER_API_KEY',
-  );
+  static const String _apiKey = ApiKeys.openWeatherApiKey;
 
   Future<void> fetchWeather({
     required double lat,
