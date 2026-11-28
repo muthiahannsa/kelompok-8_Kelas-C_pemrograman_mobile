@@ -11,3 +11,4 @@ class ApiKeys {
   /// Daftar gratis di https://home.openweathermap.org/users/sign_up
   static const String openWeatherApiKey = 'MASUKKAN_API_KEY_ANDA_DI_SINI';
 }
+
